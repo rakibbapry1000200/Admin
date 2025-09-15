@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin Panel</title>
+<style>
+body { font-family: Arial, sans-serif; background:#f4f6f9; margin:0; padding:15px; transition: background 0.3s; }
+h2 { text-align:center; margin-bottom:20px; color:#333; }
+.card { background:#fff; padding:20px; border-radius:12px; box-shadow:0 6px 20px rgba(0,0,0,0.1); margin-bottom:20px; transition: transform 0.3s, box-shadow 0.3s; }
+.card:hover { transform: translateY(-3px); box-shadow:0 10px 25px rgba(0,0,0,0.15); }
+input, select { width:100%; margin:8px 0; padding:10px; border:1px solid #ddd; border-radius:8px; transition: box-shadow 0.3s; }
+input:focus { box-shadow:0 0 8px #007bff; outline:none; }
+button { padding:10px 15px; margin:5px 3px; border:none; border-radius:8px; cursor:pointer; transition: all 0.3s; }
+button:hover { transform: scale(1.05); }
+.btn-primary { background:#007bff; color:#fff; }
+.btn-danger { background:#dc3545; color:#fff; }
+.btn-edit { background:#ffc107; color:#000; }
+.tabs { display:flex; gap:10px; margin-bottom:15px; }
+.tab { padding:10px 15px; border-radius:8px; cursor:pointer; background:#eee; transition: background 0.3s; }
+.tab.active { background:#007bff; color:#fff; }
+ul { list-style:none; padding:0; }
+li { background:#fff; margin:8px 0; padding:12px; border-radius:8px; display:flex; justify-content:space-between; align-items:flex-start; box-shadow:0 3px 10px rgba(0,0,0,0.08); flex-direction:column; opacity:0; transform: translateY(20px); transition: all 0.4s; }
+li.show { opacity:1; transform: translateY(0); }
+.actions { margin-top:10px; display:flex; gap:5px; }
+.editForm { display:flex; flex-direction:column; gap:6px; margin-top:10px; }
+.editForm label { font-weight:bold; font-size:14px; }
+.editForm input { padding:8px; border-radius:6px; border:1px solid #ccc; }
+.editForm button { align-self:flex-start; padding:8px 12px; border-radius:6px; border:none; background:#28a745; color:#fff; cursor:pointer; }
+.hidden { display:none; }
+#searchAdmin { padding:10px; border-radius:8px; border:1px solid #ddd; width:100%; margin-bottom:10px; }
+.suggestions { position: absolute; background:#fff; border:1px solid #ccc; border-radius:8px; max-height:180px; overflow-y:auto; z-index:10; width:calc(100% - 30px); box-shadow:0 4px 10px rgba(0,0,0,0.1); }
+.suggestions div { padding:8px 12px; cursor:pointer; transition: background 0.2s; }
+.suggestions div:hover { background:#f0f0f0; }
+#loginCard { max-width:400px; margin:40px auto; padding:25px; border-radius:12px; box-shadow:0 6px 25px rgba(0,0,0,0.12); background:#fff; transition: transform 0.3s; }
+#loginCard:hover { transform: translateY(-4px); }
+</style>
+</head>
+<body>
+
+<h2>Admin Panel</h2>
+
+<!-- Login Card -->
+<div id="loginCard">
+  <input id="email" type="email" placeholder="Email" required>
+  <input id="password" type="password" placeholder="Password" required>
+  <button class="btn-primary" id="loginBtn">Login</button>
+</div>
+
+<!-- Admin Card -->
+<div id="adminCard" class="hidden">
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <div class="tab active" data-tab="uploadTab">Upload App</div>
+    <div class="tab" data-tab="listTab">Apps List</div>
+  </div>
+
+  <!-- Upload App Section -->
+  <div id="uploadTab">
+    <div class="card">
+      <form id="uploadForm">
+        <label>App Name</label>
+        <input id="name" placeholder="App Name" required>
+        <label>Logo URL</label>
+        <input id="logo" placeholder="Logo URL" required>
+        <label>Download Link</label>
+        <input id="download" placeholder="Download Link" required>
+        <label>Ad Link</label>
+        <input id="adLink" placeholder="Ad Link" required>
+        <button type="submit" class="btn-primary">Upload App</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Apps List Section -->
+  <div id="listTab" class="hidden">
+    <div style="position:relative;">
+      <input id="searchAdmin" placeholder="Search app...">
+      <div id="searchSuggestions" class="suggestions hidden"></div>
+    </div>
+    <ul id="appList"></ul>
+  </div>
+
+  <button class="btn-danger" id="logoutBtn">Logout</button>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-app.js";
+import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-auth.js";
+import { getFirestore, collection, addDoc, deleteDoc, doc, getDocs, updateDoc, query, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCNP0GL4e20bm-grS6jHnL0b3d2rpAFszo",
+  authDomain: "mood-s-apk.firebaseapp.com",
+  projectId: "mood-s-apk",
+  storageBucket: "mood-s-apk.appspot.com",
+  messagingSenderId: "677810239788",
+  appId: "1:677810239788:web:d156ad0c565a0f673cd489"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const auth = getAuth(app);
+
+let appsCache = [];
+
+// Login
+document.getElementById("loginBtn").addEventListener("click", async()=>{
+  const email = document.getElementById("email").value;
+  const pass = document.getElementById("password").value;
+  try{ await signInWithEmailAndPassword(auth,email,pass); }
+  catch(e){ alert(e.message); }
+});
+
+// Logout
+document.getElementById("logoutBtn").addEventListener("click", ()=>signOut(auth));
+
+// Tabs
+document.querySelectorAll('.tab').forEach(tab=>{
+  tab.addEventListener('click', ()=>{
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('uploadTab').classList.toggle('hidden', tab.dataset.tab!=='uploadTab');
+    document.getElementById('listTab').classList.toggle('hidden', tab.dataset.tab!=='listTab');
+  });
+});
+
+// Upload App
+document.getElementById("uploadForm").addEventListener("submit", async(e)=>{
+  e.preventDefault();
+  const name=document.getElementById("name").value;
+  const logo=document.getElementById("logo").value;
+  const download=document.getElementById("download").value;
+  const adLink=document.getElementById("adLink").value;
+  await addDoc(collection(db,"apps"),{name,logo,download,adLink,createdAt: serverTimestamp()});
+  e.target.reset();
+  loadApps();
+});
+
+// Load Apps
+async function loadApps(){
+  const q = query(collection(db,"apps"), orderBy("createdAt","desc"));
+  const snapshot = await getDocs(q);
+  appsCache=[];
+  snapshot.forEach(d=>appsCache.push({id:d.id,...d.data()}));
+  renderApps(appsCache);
+}
+
+// Render Apps
+function renderApps(apps){
+  const list=document.getElementById("appList");
+  list.innerHTML="";
+  apps.forEach(app=>{
+    const li=document.createElement("li");
+    li.setAttribute('data-id', app.id);
+    li.innerHTML=`
+      <div style="display:flex; align-items:center; gap:10px;">
+        <img src="${app.logo}" style="width:50px; height:50px; border-radius:10px; object-fit:cover;">
+        <span><b>${app.name}</b></span>
+      </div>
+      <div class="actions">
+        <button class="btn-edit" data-id="${app.id}">Edit</button>
+        <button class="btn-danger" data-id="${app.id}">Delete</button>
+      </div>
+    `;
+    list.appendChild(li);
+    setTimeout(()=>li.classList.add("show"),50);
+  });
+
+  document.querySelectorAll('.btn-danger').forEach(btn=>{ btn.onclick=()=>deleteApp(btn.dataset.id); });
+  document.querySelectorAll('.btn-edit').forEach(btn=>{ btn.onclick=()=>editApp(btn.dataset.id); });
+}
+
+// Delete App
+async function deleteApp(id){ await deleteDoc(doc(db,"apps",id)); loadApps(); }
+
+// Edit App
+function editApp(id){
+  const li=document.querySelector(`#appList li[data-id='${id}']`);
+  const app=appsCache.find(a=>a.id===id);
+  const existingForm=li.querySelector('.editForm');
+  if(existingForm){ existingForm.remove(); return; }
+
+  const form=document.createElement('div');
+  form.className='editForm';
+  form.innerHTML=`
+    <label>App Name</label>
+    <input type="text" value="${app.name}" id="editName_${id}">
+    <label>Logo URL</label>
+    <input type="text" value="${app.logo}" id="editLogo_${id}">
+    <label>Download Link</label>
+    <input type="text" value="${app.download}" id="editDownload_${id}">
+    <label>Ad Link</label>
+    <input type="text" value="${app.adLink}" id="editAd_${id}">
+    <button id="saveBtn_${id}">Save</button>
+  `;
+  li.appendChild(form);
+
+  document.getElementById(`saveBtn_${id}`).addEventListener("click", async()=>{
+    const name=document.getElementById(`editName_${id}`).value;
+    const logo=document.getElementById(`editLogo_${id}`).value;
+    const download=document.getElementById(`editDownload_${id}`).value;
+    const adLink=document.getElementById(`editAd_${id}`).value;
+    await updateDoc(doc(db,"apps",id),{name,logo,download,adLink});
+    loadApps();
+  });
+}
+
+// Search with Suggestions
+const searchInput=document.getElementById("searchAdmin");
+const suggestionsBox=document.getElementById("searchSuggestions");
+
+searchInput.addEventListener("input",()=>{
+  const query=searchInput.value.toLowerCase();
+  suggestionsBox.innerHTML="";
+  if(!query){ suggestionsBox.classList.add("hidden"); renderApps(appsCache); return; }
+  const results=appsCache.filter(app=>app.name.toLowerCase().includes(query));
+  results.forEach(app=>{
+    const div=document.createElement("div");
+    div.textContent=app.name;
+    div.onclick=()=>{
+      searchInput.value=app.name;
+      renderApps([app]);
+      suggestionsBox.classList.add("hidden");
+    };
+    suggestionsBox.appendChild(div);
+  });
+  suggestionsBox.classList.toggle("hidden", results.length===0);
+});
+
+// Auth State
+onAuthStateChanged(auth,user=>{
+  if(user){
+    document.getElementById("loginCard").classList.add("hidden");
+    document.getElementById("adminCard").classList.remove("hidden");
+    loadApps();
+  }else{
+    document.getElementById("loginCard").classList.remove("hidden");
+    document.getElementById("adminCard").classList.add("hidden");
+  }
+});
+</script>
+
+</body>
+</html>
